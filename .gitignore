@@ -1,0 +1,16 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# YAML Configs
+pipeline_yaml/*
+!pipeline_yaml/template_pipeline.yaml
+!pipeline_yaml/[Pp][Uu][Bb][Ll][Ii][Cc]/
+!pipeline_yaml/*[Pp][Uu][Bb][Ll][Ii][Cc]*.yaml
