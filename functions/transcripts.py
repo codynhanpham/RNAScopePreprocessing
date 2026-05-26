@@ -11,7 +11,7 @@ import typing
 from functions import helpers
 
 
-def getDetectedTranscriptsStats(detected_transcripts_file: str, experiment_name: str, line_per_read_chunk: int = 10**5 * 5, n_threads=8) -> typing.Union[dict, None]:
+def getDetectedTranscriptsStats(detected_transcripts_file: str, experiment_name: str, chunksize_KiB: int = 2048, n_threads=8) -> typing.Union[dict, None]:
     """
     Load the detected transcripts data matrix. Return an AnnData object.
 
@@ -97,7 +97,9 @@ def getDetectedTranscriptsStats(detected_transcripts_file: str, experiment_name:
     # Call the binary to process the detected transcripts data file
     try:
         print(f"Processing detected transcripts data...")
-        json_string = subprocess.run(["detected_transcripts_metadata", "-i", detected_transcripts_file, "-q", "-o", "-", "-c", f"{line_per_read_chunk}", "-p", f"{n_threads}"], shell=False, capture_output=True)
+        # Use the resolved absolute executable path; with shell=False, each arg is passed safely.
+        cmd = [binpath, "-i", detected_transcripts_file, "-q", "-o", "-", "-c", f"{chunksize_KiB}", "-p", f"{n_threads}"]
+        json_string = subprocess.run(cmd, shell=False, capture_output=True)
     except Exception as e:
         print(f"Error: {e}")
 

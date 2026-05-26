@@ -1,4 +1,4 @@
-from functions import helpers, file_io, data_hashing, transcripts, data_filtering, cell_types, yaml_instructions
+from functions import helpers, file_io, data_hashing, transcripts, data_filtering, yaml_instructions
 import yaml
 
 import os
@@ -34,7 +34,6 @@ def main():
     # QC of Transcripts:
     # Load the transcripts data
     print("Loading transcripts data...")
-    chunk_multiplier = 4
     transcripts_csv_len = len(PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"])
     metadata: list[dict | None] = [None] * transcripts_csv_len
     for i, detected_transcripts_csv in enumerate(PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"]):
@@ -45,14 +44,14 @@ def main():
 
         if (json is None or os.path.exists(json) is False):
             print(f"\t[{i+1}/{transcripts_csv_len}] No pre-processed JSON file for {name}. Processing the CSV file...")
-            metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, chunk_multiplier * 10**4)
+            metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, 2048)
         else:
             if prioritize_json:
                 print(f"\t[{i+1}/{transcripts_csv_len}] Loading pre-processed JSON file for {name}...")
-                metadata[i] = transcripts.getDetectedTranscriptsStats(json, name, chunk_multiplier * 10**4)
+                metadata[i] = transcripts.getDetectedTranscriptsStats(json, name, 2048)
             else:
                 print(f"\t[{i+1}/{transcripts_csv_len}] Processing the CSV file for {name}...")
-                metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, chunk_multiplier * 10**4)
+                metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, 2048)
 
     assert all(m is not None for m in metadata), "Not all metadata entries were populated by the loop."
     metadata_list = cast(list[dict], metadata)
@@ -84,7 +83,7 @@ def main():
     if "transcripts_metadata" not in PIPELINE_CONFIG["data_inputs"]["metadata"]:
         PIPELINE_CONFIG["data_inputs"]["metadata"]["transcripts_metadata"] = metadata_single
 
-    del(transcripts_csv_len, chunk_multiplier, use_for_analysis_index, csv_names, metadata_list, metadata_single)
+    del(transcripts_csv_len, use_for_analysis_index, csv_names, metadata_list, metadata_single)
 
 
 
