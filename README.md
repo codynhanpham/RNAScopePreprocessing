@@ -1,5 +1,6 @@
 # RNAScope Preprocessing
 
+> [!WARNING]
 > Work-in-progress preprocessing pipeline for RNAScope data
 >
 > For now, except for RNA-Scope specific steps (see [notebook](./notebooks/imapose2vizgen/scratch_imapose2vizgen.ipynb)), the main processing pipeline is adapted from https://github.com/codynhanpham/MERFISH_Analysis_Pipeline
@@ -25,8 +26,8 @@ In addition to this repository, you will also need:
 
 2. The source [Cellpose](https://github.com/mouseland/cellpose) package, or alternatively, the preconfigured and one-command install [cellpose-local](https://github.com/codynhanpham/cellpose-local) repository, set up elsewhere on your system to run Cellpose segmentation
 
-    > [!IMPORTANT]
-    > It is recommended that you have Cellpose installed separately from this repository's environment to avoid dependency conflicts. Cellpose relies on older versions of many packages and is strongly recommended to be run in its own isolated environment. Use the [cellpose-local](https://github.com/codynhanpham/cellpose-local) repository to skip the hassle and set up Cellpose with a single `uv sync` command.
+> [!IMPORTANT]
+> It is recommended that you have Cellpose installed separately from this repository's environment to avoid dependency conflicts. Cellpose relies on older versions of many packages and is strongly recommended to be run in its own isolated environment. Use the [cellpose-local](https://github.com/codynhanpham/cellpose-local) repository to skip the hassle and set up Cellpose with a single `uv sync` command.
 
 See [notebook](./notebooks/imapose2vizgen/scratch_imapose2vizgen.ipynb) for converting Imaris puncta detection output and Cellpose segmentation into Vizgen-compatible formats for downstream analysis.
 
