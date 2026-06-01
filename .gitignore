@@ -11,10 +11,10 @@ wheels/
 
 # Notebooks
 notebooks/imapose2vizgen/*
-!notebooks/imapose2vizgen/scratch_imapose2vizgen.ipynb
+!notebooks/imapose2vizgen/_template_scratch_imapose2vizgen.ipynb
 
 # YAML Configs
 pipeline_yaml/*
-!pipeline_yaml/template_pipeline.yaml
+!pipeline_yaml/_template_pipeline.yaml
 !pipeline_yaml/[Pp][Uu][Bb][Ll][Ii][Cc]/
 !pipeline_yaml/*[Pp][Uu][Bb][Ll][Ii][Cc]*.yaml
