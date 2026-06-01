@@ -9,6 +9,10 @@ wheels/
 # Virtual environments
 .venv
 
+# Notebooks
+notebooks/imapose2vizgen/*
+!notebooks/imapose2vizgen/scratch_imapose2vizgen.ipynb
+
 # YAML Configs
 pipeline_yaml/*
 !pipeline_yaml/template_pipeline.yaml
