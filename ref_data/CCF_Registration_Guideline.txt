@@ -1,0 +1,54 @@
+Please install the QuickNII and VisuAlign software before following the steps below for CCF registration.
+- QuickNII: https://www.nitrc.org/projects/quicknii
+- VisuAlign: https://www.nitrc.org/projects/visualign/
+
+After downloading, save each software in their own folder/directory. Recommended folder structure:
+--- CCF_Registration_Tools
+    +--- QuickNII
+    +--- VisuAlign
+    +--- CCF_Registration_Guideline.txt (this file)
+
+
+=================================
+
+
+STEP 1: Prepare the slice image
+	- Export a photo (.png) of the slice
+	- Flip the image as necessary to make sure that left hemi is on the left, and right hemi is on the right
+	- Make sure to rename the image (.png) file to ends with "_s0", for example, "DAPI+PolyT_s0.png"
+	- Move the image file to the directory/location where you want to save the final output
+
+STEP 2: QuickNII
+	- In the QuickNII folder, run the FileBuilder.bat
+	- Select the image file you created in step 1
+	- Create the XML file for the slice image, select the output location to be next to the original image
+
+	- Start QuickNII.exe
+	- Click on "Manage data" in the toolbar
+	- In the bottom left, select "Load" and pick the XML file you have just created
+	- The loaded data will be listed in the table. Double-click on the data row to open that slice in the main QuickNII window
+	- In the bottom left of the main QuickNII window, click on "Values and control"
+	- Select the correct slice orientation (coronal, horizontal, or sagittal) in the drop down from the control panel
+	- Double check the updated orientation in the tool bar. It will show the first 3 characters of the orientation (COR, HOR, SAG)
+	- Rotate the reference image by typing in the rotation angle in degrees in the 3 color-coded boxes
+	- The Left-Right labels on the reference image mini windows are flipped!
+		- Try making some obvious and drastic changes in the mini panels and see how the main alignment window react
+		- If the histological image was oriented correctly (left side of tissue is on the left side of the image), the alignment window should match
+
+	- Try your best to align the slice image to the reference atlases
+	- After the alignment, click on "Store" in the toolbar, then go back to the "Manage data" window
+	- You will notice the red "!" in the "Status" column has turned green after you stored the alignment
+	- At the bottom left, click on "Save JSON" and save it next to the original image file
+
+STEP 3: VisuAlign
+	- In the VisuAlign folder, run VisuAlign.bat
+	- From the menu bar, go to "File > Open" and select the JSON file generated in step 2
+	- The slice will now be loaded in the VisuAlign window
+	- Change the opacity to see both the atlas's labels and the slice - turn the Opacity to max to only show the atlas outline
+	- Hitting Spacebar will drop an anchor at your current cursor location. Drop the anchors at important places first to avoid over-warping
+	- Avoid dropping too many anchor points. Around 10 and under should be plenty
+	- Drag the anchor points to warp the atlas to fit your slice. Make sure the anatomical regions still make sense after warping!
+	- You can delete the anchor by hovering the mouse cursor over it, then hit Del on the keyboard
+
+	- After the alignment, go to "File > Export..." and navigate to the folder where the original image was saved
+	- Here, make a new folder called "aligned", navigate to that new folder, and click on Save
