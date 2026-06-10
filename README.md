@@ -19,6 +19,13 @@
     ```
 
 
+<!-- ## General Imaging Pipeline
+To ensure compatibility with this preprocessing codebase, please use this general guideline for your imaging pipeline.
+1. Before taking any high resolution image of your genes of interest, first take a low resolution scan (overview image) of your entire region of interest to use as landmark for downstream CCF registration.
+    1. The overview image **MUST** cover your region/subregions of interest. CCF registration mask will be derived from the overview image, so if your overview image misses part of your dataset, the CCF mask will do so as well.
+2. After taking the overview  -->
+
+
 ## Usage
 ### Imaris spots + Cellpose segmentation to Vizgen-compatible formats
 In addition to this repository, you will also need:

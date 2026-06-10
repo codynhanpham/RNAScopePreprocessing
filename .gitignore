@@ -13,6 +13,10 @@ wheels/
 notebooks/imapose2vizgen/*
 !notebooks/imapose2vizgen/_template_scratch_imapose2vizgen.ipynb
 
+notebooks/subregions_CCF_registration/*
+!notebooks/subregions_CCF_registration/_template_scratch_subregions_CCF_registration.ipynb
+
+
 # YAML Configs
 pipeline_yaml/*
 !pipeline_yaml/_template_pipeline.yaml
