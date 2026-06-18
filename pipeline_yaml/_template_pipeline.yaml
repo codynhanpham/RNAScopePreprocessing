@@ -31,7 +31,7 @@ data_inputs:
 
   # Rotation angle for the spatial plot
   spatial_rotation_degrees: 0
-  spatial_flip_x: true
+  spatial_flip_x: false
 
   # Data tables for the detected spots
   detected_transcripts:
