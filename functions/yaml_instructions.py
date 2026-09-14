@@ -6,6 +6,22 @@ import typing
 
 from functions import data_hashing
 
+
+def _file_validator(field_name: str, extension: str) -> typing.Callable[[object], bool]:
+    def validate(path: object) -> bool:
+        if path is None:
+            return True
+        if not isinstance(path, str):
+            return False
+        if not os.path.isfile(path):
+            raise SchemaError(f"{field_name} path must lead to an existing file")
+        if not path.endswith(extension):
+            raise SchemaError(f"{field_name} path must have a '{extension}' file type")
+        return True
+
+    return validate
+
+
 pipeline_schema = Schema({
     "data_inputs": {
         "experiment_name": str,
@@ -14,16 +30,16 @@ pipeline_schema = Schema({
 
         "detected_transcripts": {
             "detected_transcripts_csv": [{
-                "csv": And(str, lambda x: x.endswith(".csv") and os.path.exists(x), error="'detected_transcripts_csv' -> 'csv' path must end in '.csv' and lead to a valid existing file"),
-                "json": Or(None, And(str, lambda x: x.endswith(".json") and os.path.exists(x), error="'detected_transcripts_csv' -> 'json' path must end in '.json' and lead to a valid existing file")),  # type: ignore[arg-type]
+                "csv": And(str, _file_validator("'detected_transcripts_csv' -> 'csv'", ".csv")),
+                "json": _file_validator("'detected_transcripts_csv' -> 'json'", ".json"),
                 "name": str,
                 "prioritize_json": bool,
             }],
             "use_for_analysis": str,
         },
-        "cell_metadata_csv": And(str, lambda x: x.endswith(".csv") and os.path.exists(x), error="'cell_metadata_csv' path must end in '.csv' and lead to a valid existing file"),
-        "cell_by_gene_csv": And(str, lambda x: x.endswith(".csv") and os.path.exists(x), error="'cell_by_gene_csv' path must end in '.csv' and lead to a valid existing file"),
-        Optional("prioritized_hdf5"): Or(None, And(str, lambda x: x.endswith(".hdf5") and os.path.exists(x), error="'prioritized_hdf5' path must end in '.hdf5' and lead to a valid existing file")),  # type: ignore[arg-type]
+        "cell_metadata_csv": And(str, _file_validator("'cell_metadata_csv'", ".csv")),
+        "cell_by_gene_csv": And(str, _file_validator("'cell_by_gene_csv'", ".csv")),
+        Optional("prioritized_hdf5"): _file_validator("'prioritized_hdf5'", ".hdf5"),
 
         "spatial_rotation_degrees": Or(float, int),
         "spatial_flip_x": bool,
