@@ -28,7 +28,7 @@ def _transcript_counts_per_cell(adata: anndata.AnnData) -> np.ndarray:
     return adata.X[:, cols].sum(axis=1)
 
 
-def adata_metadata(adata: anndata.AnnData) -> str:
+def adata_metadata(adata: anndata.AnnData, include_zero: typing.Union[bool, None] = None) -> str:
     """
     Return the basic cells and transcripts metadata of the AnnData object.
 
@@ -36,6 +36,10 @@ def adata_metadata(adata: anndata.AnnData) -> str:
     ----------
     - `adata` : **anndata.AnnData**
         An AnnData object containing the cell metadata and cell-by-gene data matrix.
+    - `include_zero` : **bool** or **None**
+        The `include_zero` flag of the filtering step this metadata describes.
+        When provided, it is reported in each applicable section. `None` (e.g. for
+        the raw pre-filter report) omits the line.
 
     Returns
     -------
@@ -54,6 +58,8 @@ def adata_metadata(adata: anndata.AnnData) -> str:
     cell_volume = adata.obs["volume"]
 
     metadata += f"\nCells Volume Info: ({cell_count})\n"
+    if include_zero is not None:
+        metadata += f"  include_zero: {include_zero}\n"
     if cell_count == 0:
         metadata += "  No cells remaining after filtering.\n"
     else:
@@ -66,14 +72,16 @@ def adata_metadata(adata: anndata.AnnData) -> str:
 
     del cell_count, cell_volume
 
-    transcripts = _transcript_counts_per_cell(adata)
-    transcripts = transcripts[transcripts > 0]
+    all_transcript_counts = _transcript_counts_per_cell(adata)
+    transcripts = all_transcript_counts[all_transcript_counts > 0]
+    metadata += f"\nTranscripts Info: ({len(all_transcript_counts)} total | {len(transcripts)} non-zero)\n"
+    if include_zero is not None:
+        metadata += f"  include_zero: {include_zero}\n"
     if len(transcripts) == 0:
-        metadata += "\nTranscripts Info: (0 non-zero)\n"
         metadata += "  No transcripts found (intensity-only dataset or all counts are zero).\n"
     else:
         total_transcripts = transcripts.sum()
-        metadata += f"\nTranscripts Info: ({total_transcripts} non-zero)\n"
+        metadata += f"  Total transcripts (non-zero cells): {total_transcripts}\n"
         metadata += f"  Min: {round(transcripts.min(), 2)} | Max: {round(transcripts.max(), 2)}\n  Mean: {round(np.mean(transcripts))} | Std: {round(np.std(transcripts), 2)}\n  Median: {round(np.median(transcripts))} | SEM: {round(np.std(transcripts) / np.sqrt(len(transcripts)), 2)}\n"
         metadata += f"    1st  - 99th Percentile: {round(np.percentile(transcripts, 1), 2)} - {round(np.percentile(transcripts, 99), 2)}\n"
         metadata += f"    3rd  - 97th Percentile: {round(np.percentile(transcripts, 3), 2)} - {round(np.percentile(transcripts, 97), 2)}\n"
@@ -93,6 +101,8 @@ def adata_metadata(adata: anndata.AnnData) -> str:
     # Subset adata to only include non Blanks genes
     adata = adata[:, adata.var["Genes"]]
     metadata += f"\nGenes per Cell Info: ({len(adata.var['Genes'])})\n"
+    if include_zero is not None:
+        metadata += f"  include_zero: {include_zero}\n"
     if len(gene_per_cell) == 0:
         metadata += "  No cells remaining after filtering.\n"
     else:
@@ -158,7 +168,7 @@ def plot_cell_metadata(adata: anndata.AnnData, metadata_str: typing.Union[str, N
     return mainfig
     
 
-def filter_cell_volume(adata: anndata.AnnData, min_volume: int, max_volume: int, format: typing.Literal["percentile", "literal"]) -> anndata.AnnData:
+def filter_cell_volume(adata: anndata.AnnData, min_volume: int, max_volume: int, format: typing.Literal["percentile", "literal"], include_zero: bool = False) -> anndata.AnnData:
     """
     Filter the cells based on their volume.
 
@@ -184,8 +194,13 @@ def filter_cell_volume(adata: anndata.AnnData, min_volume: int, max_volume: int,
                 "cell_volume filter with format 'percentile' cannot be applied: "
                 "no cells remain in the AnnData object."
             )
-        min_volume = np.percentile(adata_filtered.obs["volume"], min_volume)
-        max_volume = np.percentile(adata_filtered.obs["volume"], max_volume)
+        volumes = adata_filtered.obs["volume"].to_numpy()
+        if not include_zero:
+            nonzero_volumes = volumes[volumes > 0]
+            if len(nonzero_volumes) > 0:
+                volumes = nonzero_volumes
+        min_volume = np.percentile(volumes, min_volume)
+        max_volume = np.percentile(volumes, max_volume)
 
     adata_filtered = adata_filtered[(adata_filtered.obs["volume"] >= min_volume) & (adata_filtered.obs["volume"] <= max_volume)]
 
@@ -242,7 +257,7 @@ def filter_blank_thresholding(adata: anndata.AnnData, set_threshold: typing.Lite
     return adata_filtered
 
 
-def filter_transcript_count(adata: anndata.AnnData, min_transcript: int, max_transcript: int, format: typing.Literal["percentile", "literal"]) -> anndata.AnnData:
+def filter_transcript_count(adata: anndata.AnnData, min_transcript: int, max_transcript: int, format: typing.Literal["percentile", "literal"], include_zero: bool = False) -> anndata.AnnData:
     """
     Filter the cells based on the number of transcripts.
 
@@ -264,7 +279,8 @@ def filter_transcript_count(adata: anndata.AnnData, min_transcript: int, max_tra
 
     if format == "percentile":
         transcripts = _transcript_counts_per_cell(adata_filtered)
-        transcripts = transcripts[transcripts > 0]
+        if not include_zero:
+            transcripts = transcripts[transcripts > 0]
         if len(transcripts) == 0:
             # No transcripts to compute percentiles from (intensity-only dataset):
             # skip the filter rather than crash on an empty reduction
@@ -278,7 +294,7 @@ def filter_transcript_count(adata: anndata.AnnData, min_transcript: int, max_tra
     return adata_filtered
 
 
-def filter_gene_per_cell(adata: anndata.AnnData, min_genes: int, max_genes: int, format: typing.Literal["percentile", "literal"]) -> anndata.AnnData:
+def filter_gene_per_cell(adata: anndata.AnnData, min_genes: int, max_genes: int, format: typing.Literal["percentile", "literal"], include_zero: bool = False) -> anndata.AnnData:
     """
     Filter the cells based on the number of genes expressed.
 
@@ -312,8 +328,13 @@ def filter_gene_per_cell(adata: anndata.AnnData, min_genes: int, max_genes: int,
                 "gene_per_cell filter with format 'percentile' cannot be applied: "
                 "no cells remain in the AnnData object."
             )
-        min_genes = np.percentile((adata_filtered.X[:, genes] > 0).sum(axis=1), min_genes)
-        max_genes = np.percentile((adata_filtered.X[:, genes] > 0).sum(axis=1), max_genes)
+        gene_per_cell_values = (adata_filtered.X[:, genes] > 0).sum(axis=1)
+        if not include_zero:
+            nonzero_values = gene_per_cell_values[gene_per_cell_values > 0]
+            if len(nonzero_values) > 0:
+                gene_per_cell_values = nonzero_values
+        min_genes = np.percentile(gene_per_cell_values, min_genes)
+        max_genes = np.percentile(gene_per_cell_values, max_genes)
 
     min_genes = max(0, min_genes)
 
@@ -415,13 +436,13 @@ def apply_filters(adata: anndata.AnnData, filtering_procedure: dict, retain_raw_
         print(f"\t[{i+1}/{len(filtering_procedure)}] Applying filter: '{filter_name}' with parameters: {filter_params}")
 
         if filter_name == "cell_volume":
-            adata_filtered = filter_cell_volume(adata_filtered, filter_params["min"], filter_params["max"], filter_params["format"])
+            adata_filtered = filter_cell_volume(adata_filtered, filter_params["min"], filter_params["max"], filter_params["format"], filter_params.get("include_zero", False))
         elif filter_name == "blank_thresholding":
             adata_filtered = filter_blank_thresholding(adata_filtered, filter_params["set_threshold"], filter_params["filter_action"])
         elif filter_name == "transcript_count":
-            adata_filtered = filter_transcript_count(adata_filtered, filter_params["min"], filter_params["max"], filter_params["format"])
+            adata_filtered = filter_transcript_count(adata_filtered, filter_params["min"], filter_params["max"], filter_params["format"], filter_params.get("include_zero", False))
         elif filter_name == "gene_per_cell":
-            adata_filtered = filter_gene_per_cell(adata_filtered, filter_params["min"], filter_params["max"], filter_params["format"])
+            adata_filtered = filter_gene_per_cell(adata_filtered, filter_params["min"], filter_params["max"], filter_params["format"], filter_params.get("include_zero", False))
         elif filter_name == "normalize_transcript_by_volume":
             if filter_params:
                 adata_filtered = normalize_transcript_by_volume(adata_filtered)
@@ -430,7 +451,10 @@ def apply_filters(adata: anndata.AnnData, filtering_procedure: dict, retain_raw_
         print(f"\tFilter '{filter_name}' applied successfully. Current size: {adata_filtered.shape[0]} cells ({percentage}% of pre-filtered cells)")
 
         current_filtering_params = f"[{i+1}/{len(filtering_procedure)}] ({filter_name}) Parameters:\n{filter_params}\n\n\n"
-        metadata_str = current_filtering_params + adata_metadata(adata_filtered)
+        # Report the include_zero flag of this step when it supports one; fall
+        # back to the internal default (False) when omitted in the YAML.
+        step_include_zero = filter_params.get("include_zero", False) if isinstance(filter_params, dict) and filter_name in ("cell_volume", "transcript_count", "gene_per_cell") else None
+        metadata_str = current_filtering_params + adata_metadata(adata_filtered, step_include_zero)
         plt = plot_cell_metadata(adata_filtered, metadata_str, title=f"[{adata_filtered.uns['info']['experiment_name']}] Cell Metadata after '{filter_name}' filter ({i+1}/{len(filtering_procedure)})")
         stats.append(dict(plt=plt, metadata=metadata_str))
 

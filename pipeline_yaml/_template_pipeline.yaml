@@ -116,19 +116,34 @@ data_filters:
   # Define the filtering order of operations and thresholds. The steps can be repeated, and the order is significant.
   # The available steps are: cell_volume, normalize_transcript_by_volume, transcript_count, gene_per_cell
 
+  # Whether to drop cells with zero transcripts at data-load time, BEFORE any
+  # filtering_procedure runs. Default is false (zero-transcript cells are kept
+  # and only removed if a filtering step removes them).
+  drop_zero_transcript_cells: false
+
   filtering_procedure:
     - cell_volume:
         format: percentile
         min: 3
         max: 97
+        # include_zero: whether zero-valued cells (volume == 0 here) are included
+        # in the percentile computation for this step. Default false: percentiles
+        # are computed over values > 0 only. Set true to include zeros.
+        include_zero: false
 
     # Set to whether the transcript count should be normalized by the cell volume
     - normalize_transcript_by_volume: true
 
     - transcript_count:
         format: percentile
-        min: 0 # 2 to remove very low transcript count cells, 0 to keep all cells
+        min: 0
         max: 100
+        # include_zero: whether zero-transcript cells are included in the
+        # percentile computation for this step. Default false: percentiles are
+        # computed over cells with transcript_count > 0 only, so min: 0 still
+        # removes zero-transcript cells. Set true to include zeros (then
+        # min: 0 / max: 100 keeps every cell, including zero-transcript ones).
+        include_zero: true
 
   # Whether to keep a copy of un-normalized transcript counts in anndata.raw
   retain_raw_transcript_count: true

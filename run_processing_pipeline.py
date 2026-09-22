@@ -107,7 +107,7 @@ def main():
     # Load the cell metadata and gene expression data:
 
     print("Loading cell metadata, gene expression data, and ROI definitions...")
-    cell_anndata = file_io.loadDataTables(PIPELINE_CONFIG["data_inputs"]["cell_metadata_csv"], PIPELINE_CONFIG["data_inputs"]["cell_by_gene_csv"], PIPELINE_CONFIG["data_inputs"]["prioritized_hdf5"], PIPELINE_CONFIG["data_inputs"]["experiment_name"], PIPELINE_CONFIG["data_inputs"]["metadata"])
+    cell_anndata = file_io.loadDataTables(PIPELINE_CONFIG["data_inputs"]["cell_metadata_csv"], PIPELINE_CONFIG["data_inputs"]["cell_by_gene_csv"], PIPELINE_CONFIG["data_inputs"]["prioritized_hdf5"], PIPELINE_CONFIG["data_inputs"]["experiment_name"], PIPELINE_CONFIG["data_inputs"]["metadata"], PIPELINE_CONFIG["data_filters"].get("drop_zero_transcript_cells", False))
     print("Cell metadata and gene expression data loaded successfully.\n")
 
     cell_anndata_filtered = True if cell_anndata.uns.get("filtered", False) == True else False

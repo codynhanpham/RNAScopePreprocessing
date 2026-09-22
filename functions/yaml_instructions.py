@@ -63,6 +63,7 @@ pipeline_schema = Schema({
             {
                 Optional("cell_volume"): {
                     "format": And(str, lambda x: x in ("percentile", "literal"), error="'cell_volume' -> 'format' must be one of ['percentile', 'literal']"),
+                    Optional("include_zero"): bool,
                     "min": Or(float, int),
                     "max": Or(float, int),
                 },
@@ -76,6 +77,7 @@ pipeline_schema = Schema({
             {
                 Optional("transcript_count"): {
                     "format": And(str, lambda x: x in ("percentile", "literal"), error="'transcript_count' -> 'format' must be one of ['percentile', 'literal']"),
+                    Optional("include_zero"): bool,
                     "min": Or(float, int),
                     "max": Or(float, int),
                 },
@@ -86,6 +88,7 @@ pipeline_schema = Schema({
             {
                 Optional("gene_per_cell"): {
                     "format": And(str, lambda x: x in ("percentile", "literal"), error="'gene_per_cell' -> 'format' must be one of ['percentile', 'literal']"),
+                    Optional("include_zero"): bool,
                     "min": Or(float, int),
                     "max": Or(float, int),
                 },
@@ -93,6 +96,7 @@ pipeline_schema = Schema({
         ]),
 
         Optional("retain_raw_transcript_count"): bool,
+        Optional("drop_zero_transcript_cells"): bool,
     },
 
 }, ignore_extra_keys=True)
@@ -136,6 +140,17 @@ def validate_pipeline_yaml(loaded_yaml: dict) -> dict:
 
         if "retain_raw_transcript_count" not in loaded_yaml["data_filters"]:
             loaded_yaml["data_filters"]["retain_raw_transcript_count"] = False
+
+        if "drop_zero_transcript_cells" not in loaded_yaml["data_filters"]:
+            loaded_yaml["data_filters"]["drop_zero_transcript_cells"] = False
+
+        # Default include_zero to False for every filtering step that supports it
+        if loaded_yaml["data_filters"].get("filtering_procedure"):
+            for filter_step in loaded_yaml["data_filters"]["filtering_procedure"]:
+                for filter_name, filter_params in filter_step.items():
+                    if isinstance(filter_params, dict) and filter_name in ("cell_volume", "transcript_count", "gene_per_cell"):
+                        if "include_zero" not in filter_params:
+                            filter_params["include_zero"] = False
 
         # --- Additional cross-field validation ---
 

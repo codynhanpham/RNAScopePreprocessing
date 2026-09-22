@@ -54,7 +54,7 @@ def saveGenericFigures(output_dir: str, figures: typing.List[matplotlib.figure.F
 
 
 
-def loadDataTables(cell_metadata_csv: str, cell_by_gene_csv: str, prioritized_hdf5: typing.Union[str, None], experiment_name: str, additional_metadata: dict) -> anndata.AnnData:
+def loadDataTables(cell_metadata_csv: str, cell_by_gene_csv: str, prioritized_hdf5: typing.Union[str, None], experiment_name: str, additional_metadata: dict, drop_zero_transcript_cells: bool = False) -> anndata.AnnData:
     """
     Load the cell metadata and cell-by-gene data matrix. Return an AnnData object.
     
@@ -128,10 +128,12 @@ def loadDataTables(cell_metadata_csv: str, cell_by_gene_csv: str, prioritized_hd
     gene_blank_columns = [col for col in cell_by_gene_df.columns if "intensity_" not in col]
     has_transcript_data = len(gene_blank_columns) > 0
 
-    # Filter for cells with at least one transcript.
-    # If the dataset has no gene/blank columns (intensity-only data), keep all cells
-    # so the AnnData is non-empty and the intensity values survive to the output.
-    if has_transcript_data:
+    # Optionally filter for cells with at least one transcript.
+    # drop_zero_transcript_cells=True preserves the legacy behavior of dropping
+    # zero-transcript cells before any yaml filtering runs. When False (default),
+    # zero-transcript cells are kept and filtering is left to the yaml
+    # filtering_procedure. Intensity-only datasets always keep all cells.
+    if has_transcript_data and drop_zero_transcript_cells:
         cell_metadata_df = cell_metadata_df[cell_metadata_df["transcript_count"] > 0]
         cell_by_gene_df["sum"] = cell_by_gene_df[gene_blank_columns].sum(axis=1)
         cell_by_gene_df = cell_by_gene_df[cell_by_gene_df["sum"] > 0]
