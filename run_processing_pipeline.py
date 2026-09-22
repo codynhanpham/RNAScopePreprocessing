@@ -3,6 +3,7 @@ import yaml
 
 import os
 import sys
+import pandas as pd
 from typing import cast
 
 
@@ -33,57 +34,73 @@ def main():
 
     # QC of Transcripts:
     # Load the transcripts data
-    print("Loading transcripts data...")
-    transcripts_csv_len = len(PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"])
-    metadata: list[dict | None] = [None] * transcripts_csv_len
-    for i, detected_transcripts_csv in enumerate(PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"]):
-        csv = detected_transcripts_csv["csv"]
-        json = detected_transcripts_csv["json"]
-        name = detected_transcripts_csv["name"]
-        prioritize_json = detected_transcripts_csv["prioritize_json"]
+    detected_transcripts_entries = PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"]
 
-        if (json is None or os.path.exists(json) is False):
-            print(f"\t[{i+1}/{transcripts_csv_len}] No pre-processed JSON file for {name}. Processing the CSV file...")
-            metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, 2048)
-        else:
-            if prioritize_json:
-                print(f"\t[{i+1}/{transcripts_csv_len}] Loading pre-processed JSON file for {name}...")
-                metadata[i] = transcripts.getDetectedTranscriptsStats(json, name, 2048)
-            else:
-                print(f"\t[{i+1}/{transcripts_csv_len}] Processing the CSV file for {name}...")
+    # Cross-check: detected_transcripts may only be omitted/empty when the cell_by_gene
+    # data contains no non-intensity columns (i.e. it is an intensity-only dataset).
+    if len(detected_transcripts_entries) == 0:
+        cell_by_gene_columns = pd.read_csv(PIPELINE_CONFIG["data_inputs"]["cell_by_gene_csv"], nrows=0).columns.tolist()
+        non_intensity_columns = [col for col in cell_by_gene_columns if "intensity_" not in col]
+        if len(non_intensity_columns) > 0:
+            print("\x1b[31mError: 'detected_transcripts' is omitted/empty in the pipeline configuration, but the cell_by_gene data contains non-intensity columns (genes/blanks):")
+            print(f"\t{non_intensity_columns[:10]}{' ...' if len(non_intensity_columns) > 10 else ''}")
+            print("Either provide the 'detected_transcripts' block, or ensure the cell_by_gene data is intensity-only.\x1b[0m\n")
+            return
+        print("No detected_transcripts provided; the cell_by_gene data is intensity-only. Skipping the transcripts QC step.\n")
+
+    metadata_list: list[dict] = []
+    if len(detected_transcripts_entries) > 0:
+        print("Loading transcripts data...")
+        transcripts_csv_len = len(detected_transcripts_entries)
+        metadata: list[dict | None] = [None] * transcripts_csv_len
+        for i, detected_transcripts_csv in enumerate(detected_transcripts_entries):
+            csv = detected_transcripts_csv["csv"]
+            json = detected_transcripts_csv["json"]
+            name = detected_transcripts_csv["name"]
+            prioritize_json = detected_transcripts_csv["prioritize_json"]
+
+            if (json is None or os.path.exists(json) is False):
+                print(f"\t[{i+1}/{transcripts_csv_len}] No pre-processed JSON file for {name}. Processing the CSV file...")
                 metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, 2048)
+            else:
+                if prioritize_json:
+                    print(f"\t[{i+1}/{transcripts_csv_len}] Loading pre-processed JSON file for {name}...")
+                    metadata[i] = transcripts.getDetectedTranscriptsStats(json, name, 2048)
+                else:
+                    print(f"\t[{i+1}/{transcripts_csv_len}] Processing the CSV file for {name}...")
+                    metadata[i] = transcripts.getDetectedTranscriptsStats(csv, name, 2048)
 
-    assert all(m is not None for m in metadata), "Not all metadata entries were populated by the loop."
-    metadata_list = cast(list[dict], metadata)
-    del metadata
+        assert all(m is not None for m in metadata), "Not all metadata entries were populated by the loop."
+        metadata_list = cast(list[dict], metadata)
+        del metadata
 
-    print("Transcripts data loaded successfully.\n")
+        print("Transcripts data loaded successfully.\n")
 
-    # Generate the QC report
-    print("Generating the QC report...")
-    if len(metadata_list) >= 2:
-        delta_usable_transcripts = transcripts.deltaUsableTranscripts(metadata_list[-2], metadata_list[-1], PIPELINE_CONFIG["data_inputs"]["experiment_name"], dict(bubble_align_degree=-120, bubble_text_offset_deg=90))
-        assert delta_usable_transcripts is not None, "deltaUsableTranscripts returned None."
-        file_output = file_io.saveDeltaUsableTranscriptsReport(PIPELINE_CONFIG["data_outputs"]["output_dir"], delta_usable_transcripts)
-        print(f"QC report generated successfully.\nPDF saved to:\n\t{file_output[0]}\n\t{file_output[1]}\n")
-        del delta_usable_transcripts
+        # Generate the QC report
+        print("Generating the QC report...")
+        if len(metadata_list) >= 2:
+            delta_usable_transcripts = transcripts.deltaUsableTranscripts(metadata_list[-2], metadata_list[-1], PIPELINE_CONFIG["data_inputs"]["experiment_name"], dict(bubble_align_degree=-120, bubble_text_offset_deg=90))
+            assert delta_usable_transcripts is not None, "deltaUsableTranscripts returned None."
+            file_output = file_io.saveDeltaUsableTranscriptsReport(PIPELINE_CONFIG["data_outputs"]["output_dir"], delta_usable_transcripts)
+            print(f"QC report generated successfully.\nPDF saved to:\n\t{file_output[0]}\n\t{file_output[1]}\n")
+            del delta_usable_transcripts
 
-    # Only keep the metadata set for PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["use_for_analysis"] == PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"][i]["name"]
-    # Find the index of the metadata set to use for analysis
-    csv_names = [detected_transcripts_csv["name"] for detected_transcripts_csv in PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"]]
-    use_for_analysis_index = csv_names.index(PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["use_for_analysis"])
-    metadata_single = metadata_list[use_for_analysis_index]
+        # Only keep the metadata set for PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["use_for_analysis"] == PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"][i]["name"]
+        # Find the index of the metadata set to use for analysis
+        csv_names = [detected_transcripts_csv["name"] for detected_transcripts_csv in detected_transcripts_entries]
+        use_for_analysis_index = csv_names.index(PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["use_for_analysis"])
+        metadata_single = metadata_list[use_for_analysis_index]
 
-    if "transcripts_per_cell" in metadata_single:
-        del metadata_single["transcripts_per_cell"]
-    if "transcripts_histogram2d_data" in metadata_single:
-        del metadata_single["transcripts_histogram2d_data"]
+        if "transcripts_per_cell" in metadata_single:
+            del metadata_single["transcripts_per_cell"]
+        if "transcripts_histogram2d_data" in metadata_single:
+            del metadata_single["transcripts_histogram2d_data"]
 
-    # Extend PIPELINE_CONFIG["data_inputs"]["metadata"] with the metadata in a "transcripts_metadata" key
-    if "transcripts_metadata" not in PIPELINE_CONFIG["data_inputs"]["metadata"]:
-        PIPELINE_CONFIG["data_inputs"]["metadata"]["transcripts_metadata"] = metadata_single
+        # Extend PIPELINE_CONFIG["data_inputs"]["metadata"] with the metadata in a "transcripts_metadata" key
+        if "transcripts_metadata" not in PIPELINE_CONFIG["data_inputs"]["metadata"]:
+            PIPELINE_CONFIG["data_inputs"]["metadata"]["transcripts_metadata"] = metadata_single
 
-    del(transcripts_csv_len, use_for_analysis_index, csv_names, metadata_list, metadata_single)
+        del(transcripts_csv_len, use_for_analysis_index, csv_names, metadata_list, metadata_single)
 
 
 

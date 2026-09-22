@@ -109,32 +109,56 @@ def loadDataTables(cell_metadata_csv: str, cell_by_gene_csv: str, prioritized_hd
         index_col=0,
     )
 
+    # Validation: the cell_by_gene matrix must contain at least one data column
+    # (genes, blanks, or intensity values). An index-only file cannot form a valid
+    # AnnData matrix and would crash later with an opaque pandas/anndata error.
+    if len(cell_by_gene_df.columns) == 0:
+        raise ValueError(
+            f"cell_by_gene file '{cell_by_gene_csv}' contains no data columns "
+            "(only the index). The pipeline requires at least one gene, blank, or intensity column."
+        )
+
     cell_metadata_df.index = [str(x) for x in cell_metadata_df.index]
     cell_by_gene_df.index = [str(x) for x in cell_by_gene_df.index]
     info["detected_cells"] = len(cell_metadata_df)
 
+    # Identify intensity columns (raw histology intensity values, NOT gene transcript counts)
+    # A column whose name contains the substring 'intensity_' is an intensity value.
+    intensity_columns = [col for col in cell_by_gene_df.columns if "intensity_" in col]
+    gene_blank_columns = [col for col in cell_by_gene_df.columns if "intensity_" not in col]
+    has_transcript_data = len(gene_blank_columns) > 0
 
-    # Filter for cells with at least one transcript
-    cell_metadata_df = cell_metadata_df[cell_metadata_df["transcript_count"] > 0]
-    cell_by_gene_df["sum"] = cell_by_gene_df.sum(axis=1)
-    cell_by_gene_df = cell_by_gene_df[cell_by_gene_df["sum"] > 0]
-    cell_by_gene_df.drop(columns=["sum"], inplace=True)
-
-
-    total_transcripts = cell_by_gene_df.copy().sum().sum()
+    # Filter for cells with at least one transcript.
+    # If the dataset has no gene/blank columns (intensity-only data), keep all cells
+    # so the AnnData is non-empty and the intensity values survive to the output.
+    if has_transcript_data:
+        cell_metadata_df = cell_metadata_df[cell_metadata_df["transcript_count"] > 0]
+        cell_by_gene_df["sum"] = cell_by_gene_df[gene_blank_columns].sum(axis=1)
+        cell_by_gene_df = cell_by_gene_df[cell_by_gene_df["sum"] > 0]
+        cell_by_gene_df.drop(columns=["sum"], inplace=True)
 
     # Only keep the cells that are present in both the cell metadata and cell-by-gene data matrix
     cellOverlap = list(set(cell_metadata_df.index) & set(cell_by_gene_df.index))
     cellOverlap.sort()
     cell_metadata_df = cell_metadata_df.loc[cellOverlap]
     cell_by_gene_df = cell_by_gene_df.loc[cellOverlap]
-    
-    cell_metadata_df["transcript_count"] = cell_by_gene_df.sum(axis=1)
-    cell_metadata_df["genes_count"] = (cell_by_gene_df > 0).sum(axis=1)
+
+    if has_transcript_data:
+        # Transcript counts are computed over gene/blank columns only (intensity excluded)
+        cell_metadata_df["transcript_count"] = cell_by_gene_df[gene_blank_columns].sum(axis=1)
+        cell_metadata_df["genes_count"] = (cell_by_gene_df[gene_blank_columns] > 0).sum(axis=1)
+        total_transcripts = cell_by_gene_df[gene_blank_columns].sum().sum()
+    else:
+        # Intensity-only dataset: no transcripts exist, keep schema consistency with zeros
+        cell_metadata_df["transcript_count"] = 0
+        cell_metadata_df["genes_count"] = 0
+        total_transcripts = 0
+
     transcripts_coords = cell_metadata_df[["center_x", "center_y"]]
 
     info["detected_cells_with_transcripts"] = len(cell_metadata_df)
     info["total_intracellular_transcripts"] = total_transcripts
+    info["intensity_only"] = not has_transcript_data
 
     adata = anndata.AnnData(
         X=cell_by_gene_df,
@@ -142,7 +166,31 @@ def loadDataTables(cell_metadata_csv: str, cell_by_gene_csv: str, prioritized_hd
         obsm={"spatial": transcripts_coords.to_numpy()},
     )
     adata.var["Blanks"] = ["Blank" in x for x in adata.var.index]
-    adata.var["Genes"] = [not x for x in adata.var["Blanks"]]
+    adata.var["Intensity"] = ["intensity_" in x for x in adata.var.index]
+    adata.var["Genes"] = [not x and not y for x, y in zip(adata.var["Blanks"], adata.var["Intensity"])]
+
+    # Per-cell intensity channel info (additive obs columns; null value = channel absent for that cell)
+    if len(intensity_columns) > 0:
+        intensity_channels = sorted({col.split("__")[1] for col in intensity_columns if "__" in col})
+        info["intensity_channels"] = intensity_channels
+
+        intensity_values = cell_by_gene_df[intensity_columns]
+        # A channel is present for a cell if it has at least one non-null, non-NaN
+        # intensity value across all of its stat columns
+        channel_present = pd.DataFrame(
+            {ch: intensity_values[[c for c in intensity_columns if c.split("__")[1] == ch]].notna().any(axis=1)
+             for ch in intensity_channels},
+            index=cell_by_gene_df.index,
+        )
+        cell_metadata_df["intensity_channel_count"] = channel_present.sum(axis=1).astype(int)
+        cell_metadata_df["intensity_channel"] = [
+            ",".join(intensity_channels[i] for i in np.flatnonzero(row)) if row.any() else None
+            for row in channel_present.to_numpy()
+        ]
+        adata.obs["intensity_channel_count"] = cell_metadata_df["intensity_channel_count"]
+        adata.obs["intensity_channel"] = cell_metadata_df["intensity_channel"]
+    else:
+        info["intensity_channels"] = []
 
     adata.uns["info"] = info
     adata.uns["spatial"] = { experiment_name: {} }
@@ -250,6 +298,11 @@ def exportMapMyCellsInput(output_dir: str, adata: anndata.AnnData, gene_panel: d
     )
 
     adata_formatted = adata.copy()
+
+    # No genes to export (e.g. intensity-only dataset): skip MapMyCells export
+    if adata_formatted.var["Genes"].sum() == 0:
+        print("No gene columns available for MapMyCells export. Skipping.")
+        return ""
 
     adata_formatted = adata_formatted[:, adata_formatted.var["Genes"]]
     adata_formatted.obs.drop(columns=adata_formatted.obs.columns, inplace=True)

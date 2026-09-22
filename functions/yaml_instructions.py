@@ -28,7 +28,7 @@ pipeline_schema = Schema({
 
         Optional("metadata"): Or(None, dict),  # type: ignore[arg-type]
 
-        "detected_transcripts": {
+        Optional("detected_transcripts"): {
             "detected_transcripts_csv": [{
                 "csv": And(str, _file_validator("'detected_transcripts_csv' -> 'csv'", ".csv")),
                 "json": _file_validator("'detected_transcripts_csv' -> 'json'", ".json"),
@@ -111,6 +111,20 @@ def validate_pipeline_yaml(loaded_yaml: dict) -> dict:
         if "roi" not in loaded_yaml["data_inputs"]:
             loaded_yaml["data_inputs"]["roi"] = None
 
+        # Default metadata to an empty dict so downstream code can safely index into it
+        if "metadata" not in loaded_yaml["data_inputs"] or loaded_yaml["data_inputs"]["metadata"] is None:
+            loaded_yaml["data_inputs"]["metadata"] = {}
+
+        # Default detected_transcripts to an empty block (intensity-only datasets).
+        # NOTE: this is only valid when cell_by_gene contains no non-intensity columns;
+        # that cross-check is enforced at data-load time in run_processing_pipeline.py,
+        # since the yaml validator cannot inspect the CSV contents.
+        if "detected_transcripts" not in loaded_yaml["data_inputs"]:
+            loaded_yaml["data_inputs"]["detected_transcripts"] = {
+                "detected_transcripts_csv": [],
+                "use_for_analysis": None,
+            }
+
         if "normalize_mean_transcript_per_cell" not in loaded_yaml["data_outputs"]:
             loaded_yaml["data_outputs"]["normalize_mean_transcript_per_cell"] = {
                 "enable": False,
@@ -130,9 +144,10 @@ def validate_pipeline_yaml(loaded_yaml: dict) -> dict:
         if len(transcript_names) != len(set(transcript_names)):
             raise SchemaError(f"'name' in 'detected_transcripts_csv' must be unique. Duplicate names found: {transcript_names}")
 
-        # use_for_analysis must refer to one of the declared names
-        if loaded_yaml["data_inputs"]["detected_transcripts"]["use_for_analysis"] not in transcript_names:
-            raise SchemaError(f"'use_for_analysis' must be one of the names in 'detected_transcripts_csv'. Valid names are: {transcript_names}")
+        # use_for_analysis must refer to one of the declared names (only when transcripts are declared)
+        if len(transcript_names) > 0:
+            if loaded_yaml["data_inputs"]["detected_transcripts"]["use_for_analysis"] not in transcript_names:
+                raise SchemaError(f"'use_for_analysis' must be one of the names in 'detected_transcripts_csv'. Valid names are: {transcript_names}")
 
         # roi_set_name values must be unique
         if loaded_yaml["data_inputs"]["roi"] is not None:

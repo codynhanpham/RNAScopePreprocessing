@@ -10,6 +10,24 @@ import matplotlib.figure
 from functions import helpers
 
 
+def _transcript_columns(adata: anndata.AnnData) -> np.ndarray:
+    """
+    Boolean mask over var for columns that hold transcript counts (genes + blanks).
+    Intensity columns (var name contains 'intensity_') are excluded.
+    """
+    if "Intensity" in adata.var.columns:
+        return ~(adata.var["Intensity"].to_numpy().astype(bool))
+    return np.ones(adata.shape[1], dtype=bool)
+
+
+def _transcript_counts_per_cell(adata: anndata.AnnData) -> np.ndarray:
+    """Sum of X over transcript (gene/blank) columns only, per cell."""
+    cols = _transcript_columns(adata)
+    if cols.sum() == 0:
+        return np.zeros(adata.shape[0])
+    return adata.X[:, cols].sum(axis=1)
+
+
 def adata_metadata(adata: anndata.AnnData) -> str:
     """
     Return the basic cells and transcripts metadata of the AnnData object.
@@ -36,39 +54,54 @@ def adata_metadata(adata: anndata.AnnData) -> str:
     cell_volume = adata.obs["volume"]
 
     metadata += f"\nCells Volume Info: ({cell_count})\n"
-    metadata += f"  Min: {round(cell_volume.min(), 2)} | Max: {round(cell_volume.max(), 2)}\n  Mean: {round(np.mean(cell_volume), 2)} | Std: {round(np.std(cell_volume), 2)}\n  Median: {round(np.median(cell_volume), 2)} | SEM: {round(np.std(cell_volume) / np.sqrt(cell_count), 2)}\n"
-    metadata += f"    1st  - 99th Percentile: {round(np.percentile(cell_volume, 1), 2)} - {round(np.percentile(cell_volume, 99), 2)}\n"
-    metadata += f"    3rd  - 97th Percentile: {round(np.percentile(cell_volume, 3), 2)} - {round(np.percentile(cell_volume, 97), 2)}\n"
-    metadata += f"    5th  - 95th Percentile: {round(np.percentile(cell_volume, 5), 2)} - {round(np.percentile(cell_volume, 95), 2)}\n"
-    metadata += f"    10th - 90th Percentile: {round(np.percentile(cell_volume, 10), 2)} - {round(np.percentile(cell_volume, 90), 2)}\n"
-    metadata += f"    25th - 75th Percentile: {round(np.percentile(cell_volume, 25), 2)} - {round(np.percentile(cell_volume, 75), 2)}\n"
+    if cell_count == 0:
+        metadata += "  No cells remaining after filtering.\n"
+    else:
+        metadata += f"  Min: {round(cell_volume.min(), 2)} | Max: {round(cell_volume.max(), 2)}\n  Mean: {round(np.mean(cell_volume), 2)} | Std: {round(np.std(cell_volume), 2)}\n  Median: {round(np.median(cell_volume), 2)} | SEM: {round(np.std(cell_volume) / np.sqrt(cell_count), 2)}\n"
+        metadata += f"    1st  - 99th Percentile: {round(np.percentile(cell_volume, 1), 2)} - {round(np.percentile(cell_volume, 99), 2)}\n"
+        metadata += f"    3rd  - 97th Percentile: {round(np.percentile(cell_volume, 3), 2)} - {round(np.percentile(cell_volume, 97), 2)}\n"
+        metadata += f"    5th  - 95th Percentile: {round(np.percentile(cell_volume, 5), 2)} - {round(np.percentile(cell_volume, 95), 2)}\n"
+        metadata += f"    10th - 90th Percentile: {round(np.percentile(cell_volume, 10), 2)} - {round(np.percentile(cell_volume, 90), 2)}\n"
+        metadata += f"    25th - 75th Percentile: {round(np.percentile(cell_volume, 25), 2)} - {round(np.percentile(cell_volume, 75), 2)}\n"
 
     del cell_count, cell_volume
 
-    transcripts = adata.X.sum(axis=1)
+    transcripts = _transcript_counts_per_cell(adata)
     transcripts = transcripts[transcripts > 0]
-    total_transcripts = transcripts.sum()
-    metadata += f"\nTranscripts Info: ({total_transcripts} non-zero)\n"
-    metadata += f"  Min: {round(transcripts.min(), 2)} | Max: {round(transcripts.max(), 2)}\n  Mean: {round(np.mean(transcripts))} | Std: {round(np.std(transcripts), 2)}\n  Median: {round(np.median(transcripts))} | SEM: {round(np.std(transcripts) / np.sqrt(len(transcripts)), 2)}\n"
-    metadata += f"    1st  - 99th Percentile: {round(np.percentile(transcripts, 1), 2)} - {round(np.percentile(transcripts, 99), 2)}\n"
-    metadata += f"    3rd  - 97th Percentile: {round(np.percentile(transcripts, 3), 2)} - {round(np.percentile(transcripts, 97), 2)}\n"
-    metadata += f"    5th  - 95th Percentile: {round(np.percentile(transcripts, 5), 2)} - {round(np.percentile(transcripts, 95), 2)}\n"
-    metadata += f"    10th - 90th Percentile: {round(np.percentile(transcripts, 10), 2)} - {round(np.percentile(transcripts, 90), 2)}\n"
-    metadata += f"    25th - 75th Percentile: {round(np.percentile(transcripts, 25), 2)} - {round(np.percentile(transcripts, 75), 2)}\n"
+    if len(transcripts) == 0:
+        metadata += "\nTranscripts Info: (0 non-zero)\n"
+        metadata += "  No transcripts found (intensity-only dataset or all counts are zero).\n"
+    else:
+        total_transcripts = transcripts.sum()
+        metadata += f"\nTranscripts Info: ({total_transcripts} non-zero)\n"
+        metadata += f"  Min: {round(transcripts.min(), 2)} | Max: {round(transcripts.max(), 2)}\n  Mean: {round(np.mean(transcripts))} | Std: {round(np.std(transcripts), 2)}\n  Median: {round(np.median(transcripts))} | SEM: {round(np.std(transcripts) / np.sqrt(len(transcripts)), 2)}\n"
+        metadata += f"    1st  - 99th Percentile: {round(np.percentile(transcripts, 1), 2)} - {round(np.percentile(transcripts, 99), 2)}\n"
+        metadata += f"    3rd  - 97th Percentile: {round(np.percentile(transcripts, 3), 2)} - {round(np.percentile(transcripts, 97), 2)}\n"
+        metadata += f"    5th  - 95th Percentile: {round(np.percentile(transcripts, 5), 2)} - {round(np.percentile(transcripts, 95), 2)}\n"
+        metadata += f"    10th - 90th Percentile: {round(np.percentile(transcripts, 10), 2)} - {round(np.percentile(transcripts, 90), 2)}\n"
+        metadata += f"    25th - 75th Percentile: {round(np.percentile(transcripts, 25), 2)} - {round(np.percentile(transcripts, 75), 2)}\n"
 
 
-    del transcripts, total_transcripts
+    del transcripts
 
-    gene_per_cell = (adata.X > 0).sum(axis=1)
+    # Gene per cell: computed over gene columns only (intensity columns excluded)
+    gene_cols = adata.var["Genes"].to_numpy().astype(bool)
+    if gene_cols.sum() > 0:
+        gene_per_cell = (adata.X[:, gene_cols] > 0).sum(axis=1)
+    else:
+        gene_per_cell = np.zeros(adata.shape[0])
     # Subset adata to only include non Blanks genes
     adata = adata[:, adata.var["Genes"]]
     metadata += f"\nGenes per Cell Info: ({len(adata.var['Genes'])})\n"
-    metadata += f"  Min: {gene_per_cell.min()} | Max: {gene_per_cell.max()}\n  Mean: {round(np.mean(gene_per_cell))} | Std: {round(np.std(gene_per_cell), 2)}\n  Median: {round(np.median(gene_per_cell))} | SEM: {round(np.std(gene_per_cell) / np.sqrt(len(gene_per_cell)), 2)}\n"
-    metadata += f"    1st  - 99th Percentile: {round(np.percentile(gene_per_cell, 1), 2)} - {round(np.percentile(gene_per_cell, 99), 2)}\n"
-    metadata += f"    3rd  - 97th Percentile: {round(np.percentile(gene_per_cell, 3), 2)} - {round(np.percentile(gene_per_cell, 97), 2)}\n"
-    metadata += f"    5th  - 95th Percentile: {round(np.percentile(gene_per_cell, 5), 2)} - {round(np.percentile(gene_per_cell, 95), 2)}\n"
-    metadata += f"    10th  - 90th Percentile: {round(np.percentile(gene_per_cell, 10), 2)} - {round(np.percentile(gene_per_cell, 90), 2)}\n"
-    metadata += f"    25th - 75th Percentile: {round(np.percentile(gene_per_cell, 25), 2)} - {round(np.percentile(gene_per_cell, 75), 2)}\n"
+    if len(gene_per_cell) == 0:
+        metadata += "  No cells remaining after filtering.\n"
+    else:
+        metadata += f"  Min: {gene_per_cell.min()} | Max: {gene_per_cell.max()}\n  Mean: {round(np.mean(gene_per_cell))} | Std: {round(np.std(gene_per_cell), 2)}\n  Median: {round(np.median(gene_per_cell))} | SEM: {round(np.std(gene_per_cell) / np.sqrt(len(gene_per_cell)), 2)}\n"
+        metadata += f"    1st  - 99th Percentile: {round(np.percentile(gene_per_cell, 1), 2)} - {round(np.percentile(gene_per_cell, 99), 2)}\n"
+        metadata += f"    3rd  - 97th Percentile: {round(np.percentile(gene_per_cell, 3), 2)} - {round(np.percentile(gene_per_cell, 97), 2)}\n"
+        metadata += f"    5th  - 95th Percentile: {round(np.percentile(gene_per_cell, 5), 2)} - {round(np.percentile(gene_per_cell, 95), 2)}\n"
+        metadata += f"    10th  - 90th Percentile: {round(np.percentile(gene_per_cell, 10), 2)} - {round(np.percentile(gene_per_cell, 90), 2)}\n"
+        metadata += f"    25th - 75th Percentile: {round(np.percentile(gene_per_cell, 25), 2)} - {round(np.percentile(gene_per_cell, 75), 2)}\n"
 
 
     del gene_per_cell
@@ -88,8 +121,8 @@ def plot_cell_metadata(adata: anndata.AnnData, metadata_str: typing.Union[str, N
     axs2 = subfigs[1].subplots(1, 1, sharex=False, sharey=False)
 
     # Plot the histogram of transcript counts per cell
-    # Need to calculate the sum of transcripts from X
-    transcript_counts = adata.X.sum(axis=1)
+    # Need to calculate the sum of transcripts from X (gene/blank columns only, intensity excluded)
+    transcript_counts = _transcript_counts_per_cell(adata)
     axs1[0, 0].hist(transcript_counts, bins=100, color='#997543', alpha=1)
     axs1[0, 0].set_title("Transcripts per Cell")
     axs1[0, 0].set_xlabel("Transcript count")
@@ -146,6 +179,11 @@ def filter_cell_volume(adata: anndata.AnnData, min_volume: int, max_volume: int,
     adata_filtered = adata.copy()
 
     if format == "percentile":
+        if adata_filtered.shape[0] == 0:
+            raise ValueError(
+                "cell_volume filter with format 'percentile' cannot be applied: "
+                "no cells remain in the AnnData object."
+            )
         min_volume = np.percentile(adata_filtered.obs["volume"], min_volume)
         max_volume = np.percentile(adata_filtered.obs["volume"], max_volume)
 
@@ -225,12 +263,17 @@ def filter_transcript_count(adata: anndata.AnnData, min_transcript: int, max_tra
     adata_filtered = adata.copy()
 
     if format == "percentile":
-        transcripts = adata_filtered.X.sum(axis=1)
+        transcripts = _transcript_counts_per_cell(adata_filtered)
         transcripts = transcripts[transcripts > 0]
+        if len(transcripts) == 0:
+            # No transcripts to compute percentiles from (intensity-only dataset):
+            # skip the filter rather than crash on an empty reduction
+            print("\ttranscript_count filter skipped: no transcripts available for percentile computation.")
+            return adata_filtered
         min_transcript = np.percentile(transcripts, min_transcript)
         max_transcript = np.percentile(transcripts, max_transcript)
 
-    adata_filtered = adata_filtered[(adata_filtered.X.sum(axis=1) >= min_transcript) & (adata_filtered.X.sum(axis=1) <= max_transcript)]
+    adata_filtered = adata_filtered[(_transcript_counts_per_cell(adata_filtered) >= min_transcript) & (_transcript_counts_per_cell(adata_filtered) <= max_transcript)]
 
     return adata_filtered
 
@@ -255,12 +298,22 @@ def filter_gene_per_cell(adata: anndata.AnnData, min_genes: int, max_genes: int,
     """
     adata_filtered = adata.copy()
 
-    if format == "percentile":
-        min_genes = np.percentile((adata_filtered.X > 0).sum(axis=1), min_genes)
-        max_genes = np.percentile((adata_filtered.X > 0).sum(axis=1), max_genes)
-
     # Subset to only include non Blanks genes
     genes = adata_filtered.var["Genes"]
+
+    # No gene columns (intensity-only dataset): nothing to filter on, keep all cells
+    if genes.sum() == 0:
+        print("\tgene_per_cell filter skipped: no gene columns available.")
+        return adata_filtered
+
+    if format == "percentile":
+        if adata_filtered.shape[0] == 0:
+            raise ValueError(
+                "gene_per_cell filter with format 'percentile' cannot be applied: "
+                "no cells remain in the AnnData object."
+            )
+        min_genes = np.percentile((adata_filtered.X[:, genes] > 0).sum(axis=1), min_genes)
+        max_genes = np.percentile((adata_filtered.X[:, genes] > 0).sum(axis=1), max_genes)
 
     min_genes = max(0, min_genes)
 
@@ -288,16 +341,25 @@ def normalize_transcript_by_volume(adata: anndata.AnnData) -> anndata.AnnData:
 
     max_volume = adata_normalized.obs["volume"].max()
 
+    # Guard: no cells or zero volume would produce NaN scale factors (NaN -> int crash)
+    if adata_normalized.shape[0] == 0 or max_volume == 0:
+        print("\tnormalize_transcript_by_volume skipped: no cells or zero max volume.")
+        return adata_normalized
+
     # Find the scale factor and scale up the transcript count
     scale_factor = max_volume / adata_normalized.obs["volume"].to_numpy()
 
     # format the scale_factor to var length (number of genes) dimemsion
     scale_factor = scale_factor[:, np.newaxis]
-    transcript_matrix = adata_normalized.X
-    # Scale up the transcript count
-    transcript_matrix = transcript_matrix * scale_factor
-    # transcript_matrix should be int
-    transcript_matrix = transcript_matrix.astype(int)
+    transcript_matrix = adata_normalized.X.copy()
+
+    # Scale up ONLY the transcript (gene/blank) columns; intensity columns are carried
+    # through untouched (they are raw intensity values, not transcript counts)
+    transcript_cols = _transcript_columns(adata_normalized)
+    if transcript_cols.sum() > 0:
+        scaled = transcript_matrix[:, transcript_cols] * scale_factor
+        # transcript_matrix should be int
+        transcript_matrix[:, transcript_cols] = scaled.astype(int)
 
     # Overwrite the transcript count matrix
     adata_normalized.X = transcript_matrix

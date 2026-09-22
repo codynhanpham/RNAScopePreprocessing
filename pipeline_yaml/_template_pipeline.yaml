@@ -127,7 +127,7 @@ data_filters:
 
     - transcript_count:
         format: percentile
-        min: 2
+        min: 0 # 2 to remove very low transcript count cells, 0 to keep all cells
         max: 100
 
   # Whether to keep a copy of un-normalized transcript counts in anndata.raw

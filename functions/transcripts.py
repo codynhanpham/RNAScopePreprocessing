@@ -514,6 +514,13 @@ def qc_exp_set_expression(exp_set_anndata: anndata.AnnData, sort_max_expression_
     if output_pdf_path is not None and (not output_pdf_path.endswith(".pdf") or not isinstance(output_pdf_path, str)):
         raise ValueError("output_pdf_path, when specfied, must be a string and end with .pdf")
 
+    # Only process actual genes; intensity columns (var name contains 'intensity_') are
+    # raw intensity values and must not be normalized or plotted as gene expression
+    if "Intensity" in exp_set_anndata.var.columns:
+        exp_set_anndata = exp_set_anndata[:, ~exp_set_anndata.var["Intensity"].to_numpy().astype(bool)]
+    if exp_set_anndata.shape[1] == 0:
+        raise ValueError("No gene columns available for expression QC (intensity-only dataset).")
+
     # exp_names = data_summary['exp_name'].to_list()
     exp_names = exp_set_anndata.obs['exp_name'].unique().tolist()
 
