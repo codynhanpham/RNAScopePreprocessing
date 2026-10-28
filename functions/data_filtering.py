@@ -390,7 +390,7 @@ def normalize_transcript_by_volume(adata: anndata.AnnData) -> anndata.AnnData:
 
 
 
-def apply_filters(adata: anndata.AnnData, filtering_procedure: dict, retain_raw_transcript_count: bool) -> dict:
+def apply_filters(adata: anndata.AnnData, filtering_procedure: list[dict], retain_raw_transcript_count: bool) -> dict:
     """
     Read through the filtering procedure and apply the filters to the AnnData object.
 
@@ -398,8 +398,8 @@ def apply_filters(adata: anndata.AnnData, filtering_procedure: dict, retain_raw_
     ----------
     - `adata` : **anndata.AnnData**
         An AnnData object containing the cell metadata and cell-by-gene data matrix.
-    - `filtering_procedure` : **dict**
-        Dictionary containing the filtering procedure. Provided through the pipeline configuration.
+    - `filtering_procedure` : **list[dict]**
+        Ordered list of filter-step dictionaries provided through the pipeline configuration.
 
     Returns
     -------

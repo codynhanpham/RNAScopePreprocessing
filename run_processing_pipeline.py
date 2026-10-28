@@ -34,12 +34,25 @@ def main():
 
     # QC of Transcripts:
     # Load the transcripts data
-    detected_transcripts_entries = PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"]
+    configured_detected_transcripts_entries = PIPELINE_CONFIG["data_inputs"]["detected_transcripts"]["detected_transcripts_csv"]
+    detected_transcripts_entries = []
+    for detected_transcripts_entry in configured_detected_transcripts_entries:
+        if pd.read_csv(detected_transcripts_entry["csv"], nrows=1).empty:
+            print(
+                f"Skipping empty detected transcripts table for {detected_transcripts_entry['name']}; "
+                "treating this as an intensity-only dataset."
+            )
+            continue
+        detected_transcripts_entries.append(detected_transcripts_entry)
 
     # Cross-check: detected_transcripts may only be omitted/empty when the cell_by_gene
     # data contains no non-intensity columns (i.e. it is an intensity-only dataset).
     if len(detected_transcripts_entries) == 0:
-        cell_by_gene_columns = pd.read_csv(PIPELINE_CONFIG["data_inputs"]["cell_by_gene_csv"], nrows=0).columns.tolist()
+        cell_by_gene_columns = pd.read_csv(
+            PIPELINE_CONFIG["data_inputs"]["cell_by_gene_csv"],
+            nrows=0,
+            index_col=0,
+        ).columns.tolist()
         non_intensity_columns = [col for col in cell_by_gene_columns if "intensity_" not in col]
         if len(non_intensity_columns) > 0:
             print("\x1b[31mError: 'detected_transcripts' is omitted/empty in the pipeline configuration, but the cell_by_gene data contains non-intensity columns (genes/blanks):")
@@ -112,14 +125,39 @@ def main():
 
     cell_anndata_filtered = True if cell_anndata.uns.get("filtered", False) == True else False
 
+    filtering_procedure = PIPELINE_CONFIG["data_filters"].get("filtering_procedure")
+    if cell_anndata.uns["info"].get("intensity_only", False) and filtering_procedure:
+        transcript_filter_names = {
+            "blank_thresholding",
+            "transcript_count",
+            "normalize_transcript_by_volume",
+            "gene_per_cell",
+        }
+        skipped_filter_names = [
+            next(iter(filter_step))
+            for filter_step in filtering_procedure
+            if next(iter(filter_step)) in transcript_filter_names
+        ]
+        filtering_procedure = [
+            filter_step
+            for filter_step in filtering_procedure
+            if next(iter(filter_step)) not in transcript_filter_names
+        ]
+        if skipped_filter_names:
+            print(
+                "Intensity-only dataset; skipping transcript-related filters: "
+                + ", ".join(skipped_filter_names)
+                + "\n"
+            )
+
 
     # Cell Filtering and Clustering:
 
     # Filter the cells according to pipeline configuration
     print("Filtering the cells...")
     # if PIPELINE_CONFIG["data_filters"] and PIPELINE_CONFIG["data_filters"]["filtering_procedure"] and len(PIPELINE_CONFIG["data_filters"]["filtering_procedure"]) > 0 and (PIPELINE_CONFIG["data_inputs"]["prioritized_hdf5"] is None or PIPELINE_CONFIG["data_filters"]["prefiltered_hdf5"] != True):
-    if not cell_anndata_filtered and PIPELINE_CONFIG["data_filters"] and PIPELINE_CONFIG["data_filters"]["filtering_procedure"] and len(PIPELINE_CONFIG["data_filters"]["filtering_procedure"]) > 0:
-        filtering_result = data_filtering.apply_filters(cell_anndata, PIPELINE_CONFIG["data_filters"]["filtering_procedure"], PIPELINE_CONFIG["data_filters"]["retain_raw_transcript_count"])
+    if not cell_anndata_filtered and filtering_procedure and len(filtering_procedure) > 0:
+        filtering_result = data_filtering.apply_filters(cell_anndata, filtering_procedure, PIPELINE_CONFIG["data_filters"]["retain_raw_transcript_count"])
         stats = filtering_result["stats"]
         cell_anndata_filtered = filtering_result["adata"]
         print("Cells filtered successfully.\n")
